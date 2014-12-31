@@ -1,9 +1,5 @@
 #include "jmtalloc.h"
 
-static uint8_t init;
-static block_metadata *head;
-static block_metadata *tail;
-
 void __init() {
 	if(init == 0) {
 		init = 1;
@@ -60,7 +56,13 @@ block_metadata *find_free_block(size_t size) {
 	for(; current && (current->flags & FREE) == FREE
 		&& (current->flags & LOCKED) != LOCKED
 		&& (current->flags & TAIL) != TAIL
-		&& current->size >= size; current = current->next);
+		&& current->size >= size; current = current->next) {
+			if(current->prev && current->next) {
+				if(current->prev->size + current->size >= size) concat_block(current->prev, current);
+				if(current->size + current->next->size >= size) concat_block(current, current->next);
+			}
+		}
+	if(current) if(current->size > size) trim_block(current, current->size - size);
 	return current;
 }
 
@@ -76,7 +78,7 @@ block_metadata *jmtalloc_raw(size_t size) {
 	if(head->next == NULL) {
 		block = create_block(METADATA_SIZE+size);
 		head->block = block;
-		head->next = tail; // XXX XXX XXX
+		head->next = tail;
 		return block;
 	}
 	block = (size < __MMAP_THRESHOLD) ? find_free_block(METADATA_SIZE+size) : create_block(METADATA_SIZE+size);
@@ -91,7 +93,7 @@ block_metadata *jmtalloc_raw(size_t size) {
 
 uint8_t trim_block(block_metadata *block, size_t num) {
 	block = get_metadata(block);
-	if(!block) return 1;
+	if(!block || (block->flags & FREE) != FREE || (block->flags & LOCKED) == LOCKED) return 1;
 	unsigned int excess_size = block->size - num;
 	if(excess_size < MIN_SIZE+METADATA_SIZE) return 1;
 	block->size -= num;
@@ -142,7 +144,6 @@ void *jmtalloc_secure(size_t size) {
 	return request->block;
 }
 
-// unlock memory
 void jmtfree(void *block) {
 	block_metadata *p = get_metadata(block);
 	if((p->flags & VIRTUAL) == VIRTUAL) {
