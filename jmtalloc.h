@@ -14,7 +14,7 @@
 #define HEAD 	 8   // is the node the head?
 #define TAIL 	 16  // is the node the tail?
 
-typedef struct {
+typedef struct block_metadata {
 	unsigned int size;
 	unsigned int flags;
 	void *block;
@@ -23,6 +23,10 @@ typedef struct {
 } block_metadata;
 
 #define METADATA_SIZE sizeof(block_metadata)
+
+uint8_t init;
+block_metadata *head;
+block_metadata *tail;
 
 void __init();
 void *request_memory(size_t size);
